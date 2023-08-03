@@ -3,6 +3,16 @@ from flask import Flask, request, render_template, send_file
 from io import BytesIO
 from pptx import Presentation
 from pptx.util import Inches
+import subprocess
+
+module_name = "Flask"
+
+# Esegui il comando di installazione utilizzando pip
+try:
+    subprocess.check_call(["pip", "install", module_name])
+    print(f"Modulo {module_name} installato con successo.")
+except subprocess.CalledProcessError:
+    print(f"Si è verificato un errore durante l'installazione di {module_name}.")
 
 app = Flask(__name__)
 
