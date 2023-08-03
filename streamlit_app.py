@@ -1,38 +1,76 @@
-from collections import namedtuple
-import altair as alt
-import math
 import pandas as pd
-import streamlit as st
+from flask import Flask, request, render_template, send_file
+from io import BytesIO
+from pptx import Presentation
+from pptx.util import Inches
 
-"""
-# Welcome to Streamlit!
+app = Flask(__name__)
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
+import matplotlib.pyplot as plt
 
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
+def create_chart(data):
+    # Esempio di creazione di un grafico utilizzando pandas e matplotlib
+    # Puoi personalizzare questa funzione in base alle tue esigenze
+    # data: DataFrame di pandas contenente i dati da plottare
+    # return: Oggetto figura matplotlib
 
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+    # Creazione di una nuova figura specificando il backend "Agg"
+    plt.figure(figsize=(8, 6), tight_layout=True, dpi=100)
 
+    # Esempio di creazione di un grafico a barre
+    data.plot(kind='bar')
+    plt.title('Grafico')
+    plt.xlabel('X-axis')
+    plt.ylabel('Y-axis')
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5000, 2000)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
+    # Restituisci l'oggetto figura
+    return plt.gcf()
 
-    Point = namedtuple('Point', 'x y')
-    data = []
+def create_ppt(chart, start_date, end_date):
+    prs = Presentation()
+    slide_layout = prs.slide_layouts[5]  # Layout del titolo e contenuto
 
-    points_per_turn = total_points / num_turns
+    slide = prs.slides.add_slide(slide_layout)
+    title = slide.shapes.title
+    title.text = f"Grafico dal {start_date} al {end_date}"
 
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
+    img_buffer = BytesIO()
+    chart.savefig(img_buffer)
+    img_buffer.seek(0)
+    left = Inches(2)
+    top = Inches(2)
+    pic = slide.shapes.add_picture(img_buffer, left, top)
 
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+    return prs
+
+@app.route('/', methods=['GET'])
+def index():
+    return render_template('index.html')
+
+@app.route('/process_excel', methods=['POST'])
+def process_excel():
+    excel_file = request.files['excelFile']
+    start_date = request.form['startDate']
+    end_date = request.form['endDate']
+
+    # Carica il file Excel e crea un DataFrame con pandas
+    df = pd.read_excel(excel_file)
+
+    # Converti le colonne contenenti dati temporali in formato datetime di pandas
+    df['DATA'] = pd.to_datetime(df['DATA'])
+
+    # Effettua l'elaborazione dei dati e crea il grafico
+    chart = create_chart(df)
+
+    # Crea il PowerPoint e aggiunge il grafico
+    prs = create_ppt(chart, start_date, end_date)
+
+    # Salva il PowerPoint in un buffer di byte
+    ppt_buffer = BytesIO()
+    prs.save(ppt_buffer)
+    ppt_buffer.seek(0)
+
+    return send_file(ppt_buffer, as_attachment=True, attachment_filename='grafici_powerpoint.pptx')
+
+if __name__ == '__main__':
+    app.run(debug=True)
